@@ -1,7 +1,8 @@
 import type { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
+import { MulterError } from "multer";
 import { ApiError } from "../utils/ApiError.js";
-import { isProduction } from "../config/env.js";
+import { env, isProduction } from "../config/env.js";
 
 export function notFoundMiddleware(req: Request, res: Response) {
   res.status(404).json({
@@ -17,6 +18,19 @@ export function errorMiddleware(err: unknown, req: Request, res: Response, next:
         code: "VALIDATION_ERROR",
         message: "Some of the information you submitted isn't valid.",
         fields: err.flatten().fieldErrors,
+      },
+    });
+    return;
+  }
+
+  if (err instanceof MulterError) {
+    const tooLarge = err.code === "LIMIT_FILE_SIZE";
+    res.status(tooLarge ? 413 : 400).json({
+      error: {
+        code: tooLarge ? "FILE_TOO_LARGE" : "UPLOAD_ERROR",
+        message: tooLarge
+          ? `That file is larger than the ${Math.round(env.MAX_FILE_SIZE_BYTES / (1024 * 1024))} MB limit.`
+          : "That upload couldn't be processed.",
       },
     });
     return;

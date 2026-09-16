@@ -1,7 +1,10 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { StorageMeter } from "../components/ui/StorageMeter";
 import { Button } from "../components/ui/Button";
+import { fetchStorageSummary, type StorageSummary } from "../services/fileService";
+import { formatBytes } from "../utils/format";
 
 function SettingsCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -15,6 +18,11 @@ function SettingsCard({ title, children }: { title: string; children: React.Reac
 export function SettingsPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [summary, setSummary] = useState<StorageSummary | null>(null);
+
+  useEffect(() => {
+    void fetchStorageSummary().then(setSummary);
+  }, []);
 
   async function handleLogout() {
     await logout();
@@ -41,8 +49,23 @@ export function SettingsPage() {
         </SettingsCard>
 
         <SettingsCard title="Storage">
-          <StorageMeter usedBytes={0} limitBytes={user?.storageLimit ?? 0} />
-          <p className="mt-3 text-xs text-[var(--color-text-muted)]">A full breakdown by file type is coming in a later phase.</p>
+          <StorageMeter usedBytes={summary?.usedBytes ?? 0} limitBytes={summary?.limitBytes ?? user?.storageLimit ?? 0} />
+          {summary && (
+            <dl className="mt-4 flex flex-col gap-1.5 text-sm">
+              <div className="flex justify-between">
+                <dt className="text-[var(--color-text-muted)]">Photos</dt>
+                <dd className="text-[var(--color-text)]">{formatBytes(summary.breakdown.photos)}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-[var(--color-text-muted)]">Videos</dt>
+                <dd className="text-[var(--color-text)]">{formatBytes(summary.breakdown.videos)}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-[var(--color-text-muted)]">Documents</dt>
+                <dd className="text-[var(--color-text)]">{formatBytes(summary.breakdown.documents)}</dd>
+              </div>
+            </dl>
+          )}
         </SettingsCard>
 
         <SettingsCard title="Appearance">

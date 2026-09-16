@@ -21,6 +21,7 @@ const envSchema = z.object({
   STORAGE_SECRET_KEY: z.string().optional().default(""),
 
   DEFAULT_STORAGE_LIMIT_BYTES: z.coerce.number().default(10_737_418_240),
+  MAX_FILE_SIZE_BYTES: z.coerce.number().default(524_288_000), // 500 MB
 });
 
 const parsed = envSchema.safeParse(process.env);
