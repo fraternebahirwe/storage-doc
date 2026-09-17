@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useRef, useState, type FormEvent } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Bell, LogOut, Menu, Search, Settings, User as UserIcon } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
 import { useOnClickOutside } from "../../hooks/useOnClickOutside";
@@ -16,13 +16,20 @@ function initials(name: string) {
 export function Header({ onOpenSidebar }: { onOpenSidebar: () => void }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [query, setQuery] = useState(searchParams.get("q") ?? "");
   const menuRef = useRef<HTMLDivElement>(null);
   useOnClickOutside(menuRef, () => setMenuOpen(false));
 
   async function handleLogout() {
     await logout();
     navigate("/login");
+  }
+
+  function handleSearchSubmit(event: FormEvent) {
+    event.preventDefault();
+    navigate(query.trim() ? `/search?q=${encodeURIComponent(query.trim())}` : "/search");
   }
 
   return (
@@ -35,15 +42,17 @@ export function Header({ onOpenSidebar }: { onOpenSidebar: () => void }) {
         <Menu size={20} />
       </button>
 
-      <div className="relative flex-1 max-w-md">
+      <form onSubmit={handleSearchSubmit} className="relative max-w-md flex-1">
         <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
         <input
           type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
           placeholder="Search files, folders..."
           aria-label="Search files and folders"
           className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] py-2 pl-9 pr-3 text-sm outline-none placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-brand)] focus:ring-2 focus:ring-[var(--color-brand)]/20"
         />
-      </div>
+      </form>
 
       <div className="ml-auto flex items-center gap-1">
         <button

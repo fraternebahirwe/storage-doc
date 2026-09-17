@@ -6,11 +6,15 @@ import type { FileCategory, FileRecord } from "../services/fileService";
 import { UploadDropzone } from "../components/files/UploadDropzone";
 import { UploadQueue, type UploadQueueItem } from "../components/files/UploadQueue";
 import { FileCard } from "../components/files/FileCard";
+import { FileListRow } from "../components/files/FileListRow";
+import { ViewToggle } from "../components/files/ViewToggle";
+import { MoveDialog } from "../components/files/MoveDialog";
 import { EmptyState } from "../components/ui/EmptyState";
-import { RenameDialog } from "../components/ui/RenameDialog";
+import { NamePromptDialog } from "../components/ui/NamePromptDialog";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { Button } from "../components/ui/Button";
 import { useToast } from "../hooks/useToast";
+import { useViewPreference } from "../hooks/useViewPreference";
 import { ApiRequestError } from "../services/api";
 
 export function FileBrowserPage({
@@ -26,12 +30,14 @@ export function FileBrowserPage({
 }) {
   const { showToast } = useToast();
 
+  const [view, setView] = useViewPreference();
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
   const [renameTarget, setRenameTarget] = useState<FileRecord | null>(null);
+  const [moveTarget, setMoveTarget] = useState<FileRecord | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<FileRecord | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -93,6 +99,21 @@ export function FileBrowserPage({
     }
   }
 
+  async function handleMoveSubmit(folderId: string | null) {
+    if (!moveTarget) return;
+    setIsSaving(true);
+    try {
+      await fileService.moveFile(moveTarget.id, folderId);
+      showToast("File moved.");
+      setMoveTarget(null);
+      await load();
+    } catch (err) {
+      showToast(err instanceof ApiRequestError ? err.message : "Couldn't move that file.", "error");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   async function handleDeleteConfirm() {
     if (!deleteTarget) return;
     setIsSaving(true);
@@ -120,7 +141,10 @@ export function FileBrowserPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold text-[var(--color-text)]">{title}</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-xl font-semibold text-[var(--color-text)]">{title}</h1>
+        <ViewToggle view={view} onChange={setView} />
+      </div>
 
       <UploadDropzone onFilesSelected={handleFilesSelected} />
       <UploadQueue items={uploadQueue} />
@@ -131,17 +155,33 @@ export function FileBrowserPage({
         <EmptyState icon={emptyIcon} title="No files yet." description={emptyDescription} />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-            {files.map((file) => (
-              <FileCard
-                key={file.id}
-                file={file}
-                onRename={setRenameTarget}
-                onDelete={setDeleteTarget}
-                onToggleFavorite={handleToggleFavorite}
-              />
-            ))}
-          </div>
+          {view === "grid" ? (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+              {files.map((file) => (
+                <FileCard
+                  key={file.id}
+                  file={file}
+                  onRename={setRenameTarget}
+                  onMove={setMoveTarget}
+                  onDelete={setDeleteTarget}
+                  onToggleFavorite={handleToggleFavorite}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-[var(--color-border)]">
+              {files.map((file) => (
+                <FileListRow
+                  key={file.id}
+                  file={file}
+                  onRename={setRenameTarget}
+                  onMove={setMoveTarget}
+                  onDelete={setDeleteTarget}
+                  onToggleFavorite={handleToggleFavorite}
+                />
+              ))}
+            </div>
+          )}
 
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-3">
@@ -160,11 +200,21 @@ export function FileBrowserPage({
       )}
 
       {renameTarget && (
-        <RenameDialog
+        <NamePromptDialog
           initialName={renameTarget.name}
           isLoading={isSaving}
           onSubmit={handleRenameSubmit}
           onCancel={() => setRenameTarget(null)}
+        />
+      )}
+
+      {moveTarget && (
+        <MoveDialog
+          itemName={moveTarget.name}
+          currentFolderId={moveTarget.folderId}
+          isLoading={isSaving}
+          onSubmit={handleMoveSubmit}
+          onCancel={() => setMoveTarget(null)}
         />
       )}
 

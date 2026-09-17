@@ -12,6 +12,7 @@ export type FileRecord = {
   size: number;
   category: FileCategory;
   isFavorite: boolean;
+  folderId: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -34,11 +35,14 @@ export type StorageSummary = {
   breakdown: { photos: number; videos: number; documents: number };
 };
 
-export function listFiles(params: { page?: number; limit?: number; category?: FileCategory } = {}) {
+export function listFiles(
+  params: { page?: number; limit?: number; category?: FileCategory; folderId?: string | null } = {},
+) {
   const search = new URLSearchParams();
   if (params.page) search.set("page", String(params.page));
   if (params.limit) search.set("limit", String(params.limit));
   if (params.category) search.set("category", params.category);
+  if (params.folderId !== undefined) search.set("folderId", params.folderId ?? "root");
   const query = search.toString();
   return apiRequest<FileListResult>(`/api/files${query ? `?${query}` : ""}`);
 }
@@ -59,6 +63,10 @@ export function setFavorite(id: string, isFavorite: boolean) {
   return apiRequest<{ file: FileRecord }>(`/api/files/${id}/favorite`, { method: "PATCH", body: { isFavorite } });
 }
 
+export function moveFile(id: string, folderId: string | null) {
+  return apiRequest<{ file: FileRecord }>(`/api/files/${id}/move`, { method: "PATCH", body: { folderId } });
+}
+
 export function deleteFile(id: string) {
   return apiRequest<{ ok: true }>(`/api/files/${id}`, { method: "DELETE" });
 }
@@ -76,7 +84,11 @@ export function fileDownloadUrl(id: string) {
  * fetch has no upload-progress event, and each file is its own request so
  * the UI can show independent per-file progress bars.
  */
-export function uploadFile(file: File, onProgress: (percent: number) => void): Promise<FileRecord> {
+export function uploadFile(
+  file: File,
+  onProgress: (percent: number) => void,
+  folderId?: string | null,
+): Promise<FileRecord> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${API_BASE_URL}/api/files`);
@@ -107,6 +119,7 @@ export function uploadFile(file: File, onProgress: (percent: number) => void): P
 
     const formData = new FormData();
     formData.append("file", file);
+    if (folderId) formData.append("folderId", folderId);
     xhr.send(formData);
   });
 }

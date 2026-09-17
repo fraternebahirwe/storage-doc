@@ -4,6 +4,7 @@ export const listFilesQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(24),
   category: z.enum(["image", "video", "document"]).optional(),
+  folderId: z.string().min(1).optional(),
 });
 
 export const renameFileSchema = z.object({
@@ -12,4 +13,8 @@ export const renameFileSchema = z.object({
 
 export const favoriteFileSchema = z.object({
   isFavorite: z.boolean(),
+});
+
+export const moveFileSchema = z.object({
+  folderId: z.string().min(1).nullable(),
 });

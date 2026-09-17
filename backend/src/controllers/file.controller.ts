@@ -8,23 +8,31 @@ import {
   getStorageSummary,
   listFiles,
   listRecentFiles,
+  moveFile,
   renameFile,
   softDeleteFile,
   toggleFavorite,
 } from "../services/file.service.js";
-import { favoriteFileSchema, listFilesQuerySchema, renameFileSchema } from "../validation/file.validation.js";
+import { favoriteFileSchema, listFilesQuerySchema, moveFileSchema, renameFileSchema } from "../validation/file.validation.js";
+
+/** "root" means the top level (folderId null); omitted means "every folder" (used by category views). */
+function resolveFolderId(raw: string | undefined): string | null | undefined {
+  if (raw === undefined) return undefined;
+  return raw === "root" ? null : raw;
+}
 
 export const upload = asyncHandler(async (req: Request, res: Response) => {
   if (!req.file) {
     throw ApiError.badRequest("No file was uploaded.", "NO_FILE");
   }
-  const file = await createFileRecord(req.userId!, req.file);
+  const folderId = resolveFolderId(typeof req.body.folderId === "string" ? req.body.folderId : undefined);
+  const file = await createFileRecord(req.userId!, req.file, folderId);
   res.status(201).json({ file });
 });
 
 export const list = asyncHandler(async (req: Request, res: Response) => {
   const query = listFilesQuerySchema.parse(req.query);
-  const result = await listFiles(req.userId!, query);
+  const result = await listFiles(req.userId!, { ...query, folderId: resolveFolderId(query.folderId) });
   res.status(200).json(result);
 });
 
@@ -46,6 +54,12 @@ export const download = asyncHandler(async (req: Request, res: Response) => {
 export const rename = asyncHandler(async (req: Request, res: Response) => {
   const { name } = renameFileSchema.parse(req.body);
   const file = await renameFile(req.userId!, req.params.id, name);
+  res.status(200).json({ file });
+});
+
+export const move = asyncHandler(async (req: Request, res: Response) => {
+  const { folderId } = moveFileSchema.parse(req.body);
+  const file = await moveFile(req.userId!, req.params.id, folderId);
   res.status(200).json({ file });
 });
 

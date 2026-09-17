@@ -2,7 +2,8 @@ import type { Express } from "express";
 import { prisma } from "../lib/prisma.js";
 import { ApiError } from "../utils/ApiError.js";
 import { storage } from "./storage/index.js";
-import { categoryForExtension, extensionOf, type FileCategory } from "../config/fileTypes.js";
+import { getOwnedFolder } from "./folder.service.js";
+import { categoryForExtension, extensionOf, extensionsForCategory, type SearchableCategory } from "../config/fileTypes.js";
 
 function serializeFile(file: {
   id: string;
@@ -11,6 +12,7 @@ function serializeFile(file: {
   extension: string;
   size: bigint;
   isFavorite: boolean;
+  folderId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }) {
@@ -22,6 +24,7 @@ function serializeFile(file: {
     size: Number(file.size),
     category: categoryForExtension(file.extension),
     isFavorite: file.isFavorite,
+    folderId: file.folderId,
     createdAt: file.createdAt,
     updatedAt: file.updatedAt,
   };
@@ -35,7 +38,11 @@ async function currentUsageBytes(userId: string): Promise<number> {
   return Number(result._sum.size ?? 0n);
 }
 
-export async function createFileRecord(userId: string, uploaded: Express.Multer.File) {
+export async function createFileRecord(userId: string, uploaded: Express.Multer.File, folderId?: string | null) {
+  if (folderId) {
+    await getOwnedFolder(userId, folderId);
+  }
+
   const used = await currentUsageBytes(userId);
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
 
@@ -47,6 +54,7 @@ export async function createFileRecord(userId: string, uploaded: Express.Multer.
   const file = await prisma.file.create({
     data: {
       userId,
+      folderId: folderId ?? null,
       name: uploaded.originalname,
       originalName: uploaded.originalname,
       storageKey: uploaded.filename,
@@ -61,21 +69,15 @@ export async function createFileRecord(userId: string, uploaded: Express.Multer.
 
 export async function listFiles(
   userId: string,
-  options: { page: number; limit: number; category?: FileCategory },
+  options: { page: number; limit: number; category?: SearchableCategory; folderId?: string | null },
 ) {
   // Category filtering happens in the DB via extension, since it's cheap
   // and the set of extensions per category is small and fixed.
-  const { IMAGE, VIDEO, DOCUMENT } = extensionSets();
-  const categoryWhere =
-    options.category === "image"
-      ? { extension: { in: IMAGE } }
-      : options.category === "video"
-        ? { extension: { in: VIDEO } }
-        : options.category === "document"
-          ? { extension: { in: DOCUMENT } }
-          : {};
+  const categoryWhere = options.category ? { extension: { in: extensionsForCategory(options.category) } } : {};
 
-  const where = { userId, isDeleted: false, ...categoryWhere };
+  const folderWhere = options.folderId !== undefined ? { folderId: options.folderId } : {};
+
+  const where = { userId, isDeleted: false, ...categoryWhere, ...folderWhere };
 
   const [files, total] = await Promise.all([
     prisma.file.findMany({
@@ -96,16 +98,6 @@ export async function listFiles(
   };
 }
 
-function extensionSets() {
-  // Mirrors config/fileTypes.ts's private sets; kept local to avoid
-  // exporting mutable Set internals from that module.
-  return {
-    IMAGE: ["jpg", "jpeg", "png", "webp", "gif"],
-    VIDEO: ["mp4", "mov", "webm"],
-    DOCUMENT: ["pdf", "doc", "docx", "txt", "xls", "xlsx", "ppt", "pptx"],
-  };
-}
-
 export async function getOwnedFile(userId: string, fileId: string) {
   const file = await prisma.file.findUnique({ where: { id: fileId } });
   if (!file || file.userId !== userId || file.isDeleted) {
@@ -117,6 +109,15 @@ export async function getOwnedFile(userId: string, fileId: string) {
 export async function renameFile(userId: string, fileId: string, name: string) {
   await getOwnedFile(userId, fileId);
   const file = await prisma.file.update({ where: { id: fileId }, data: { name } });
+  return serializeFile(file);
+}
+
+export async function moveFile(userId: string, fileId: string, folderId: string | null) {
+  await getOwnedFile(userId, fileId);
+  if (folderId) {
+    await getOwnedFolder(userId, folderId);
+  }
+  const file = await prisma.file.update({ where: { id: fileId }, data: { folderId } });
   return serializeFile(file);
 }
 
@@ -133,12 +134,11 @@ export async function softDeleteFile(userId: string, fileId: string) {
 
 export async function getStorageSummary(userId: string) {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
-  const { IMAGE, VIDEO, DOCUMENT } = extensionSets();
 
   const [imageAgg, videoAgg, documentAgg, totalAgg, totalCount] = await Promise.all([
-    prisma.file.aggregate({ where: { userId, isDeleted: false, extension: { in: IMAGE } }, _sum: { size: true }, _count: true }),
-    prisma.file.aggregate({ where: { userId, isDeleted: false, extension: { in: VIDEO } }, _sum: { size: true }, _count: true }),
-    prisma.file.aggregate({ where: { userId, isDeleted: false, extension: { in: DOCUMENT } }, _sum: { size: true }, _count: true }),
+    prisma.file.aggregate({ where: { userId, isDeleted: false, extension: { in: extensionsForCategory("image") } }, _sum: { size: true }, _count: true }),
+    prisma.file.aggregate({ where: { userId, isDeleted: false, extension: { in: extensionsForCategory("video") } }, _sum: { size: true }, _count: true }),
+    prisma.file.aggregate({ where: { userId, isDeleted: false, extension: { in: extensionsForCategory("document") } }, _sum: { size: true }, _count: true }),
     prisma.file.aggregate({ where: { userId, isDeleted: false }, _sum: { size: true } }),
     prisma.file.count({ where: { userId, isDeleted: false } }),
   ]);

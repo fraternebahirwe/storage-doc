@@ -2,13 +2,19 @@ import { useState, type FormEvent } from "react";
 import { Button } from "./Button";
 import { FormField } from "./FormField";
 
-export function RenameDialog({
-  initialName,
+export function NamePromptDialog({
+  title = "Rename",
+  fieldLabel = "Name",
+  submitLabel = "Save",
+  initialName = "",
   isLoading,
   onSubmit,
   onCancel,
 }: {
-  initialName: string;
+  title?: string;
+  fieldLabel?: string;
+  submitLabel?: string;
+  initialName?: string;
   isLoading?: boolean;
   onSubmit: (name: string) => void;
   onCancel: () => void;
@@ -29,7 +35,7 @@ export function RenameDialog({
     <div
       role="dialog"
       aria-modal="true"
-      aria-labelledby="rename-dialog-title"
+      aria-labelledby="name-prompt-dialog-title"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
       onClick={onCancel}
     >
@@ -37,12 +43,12 @@ export function RenameDialog({
         onClick={(e) => e.stopPropagation()}
         className="w-full max-w-sm rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-xl"
       >
-        <h2 id="rename-dialog-title" className="mb-3 text-base font-semibold text-[var(--color-text)]">
-          Rename
+        <h2 id="name-prompt-dialog-title" className="mb-3 text-base font-semibold text-[var(--color-text)]">
+          {title}
         </h2>
         <form onSubmit={handleSubmit}>
           <FormField
-            label="Name"
+            label={fieldLabel}
             autoFocus
             value={name}
             onChange={(e) => {
@@ -56,7 +62,7 @@ export function RenameDialog({
               Cancel
             </Button>
             <Button type="submit" isLoading={isLoading}>
-              Save
+              {submitLabel}
             </Button>
           </div>
         </form>

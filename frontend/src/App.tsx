@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import { FolderClosed, Image, Video, FileText, Star, Clock, Share2, Trash2 } from "lucide-react";
+import { Image, Video, FileText, Star, Clock, Share2, Trash2 } from "lucide-react";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ToastProvider } from "./contexts/ToastContext";
 import { ProtectedRoute, GuestRoute } from "./components/ProtectedRoute";
@@ -11,7 +11,9 @@ import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { MyFilesPage } from "./pages/MyFilesPage";
 import { FileBrowserPage } from "./pages/FileBrowserPage";
+import { SearchResultsPage } from "./pages/SearchResultsPage";
 import { ComingSoonPage } from "./pages/ComingSoonPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 
@@ -30,17 +32,8 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
               <Route path="/dashboard" element={<DashboardPage />} />
-              <Route
-                path="/files"
-                element={
-                  <FileBrowserPage
-                    key="files"
-                    title="My Files"
-                    emptyIcon={FolderClosed}
-                    emptyDescription="Upload something to get started."
-                  />
-                }
-              />
+              <Route path="/files" element={<MyFilesPage />} />
+              <Route path="/search" element={<SearchResultsPage />} />
               <Route
                 path="/photos"
                 element={

@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Download, MoreVertical, Pencil, Star, Trash2 } from "lucide-react";
+import { Download, FolderInput, MoreVertical, Pencil, Star, Trash2 } from "lucide-react";
 import type { FileRecord } from "../../services/fileService";
 import { fileDownloadUrl, fileViewUrl } from "../../services/fileService";
 import { categoryIcon } from "./fileIcons";
@@ -28,11 +28,13 @@ function FilePreview({ file }: { file: FileRecord }) {
 export function FileCard({
   file,
   onRename,
+  onMove,
   onDelete,
   onToggleFavorite,
 }: {
   file: FileRecord;
   onRename: (file: FileRecord) => void;
+  onMove: (file: FileRecord) => void;
   onDelete: (file: FileRecord) => void;
   onToggleFavorite: (file: FileRecord) => void;
 }) {
@@ -100,6 +102,16 @@ export function FileCard({
                 className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-[var(--color-text)] hover:bg-[var(--color-surface-muted)]"
               >
                 <Pencil size={14} /> Rename
+              </button>
+              <button
+                role="menuitem"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onMove(file);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-[var(--color-text)] hover:bg-[var(--color-surface-muted)]"
+              >
+                <FolderInput size={14} /> Move
               </button>
               <button
                 role="menuitem"
