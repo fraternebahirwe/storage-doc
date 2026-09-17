@@ -4,9 +4,9 @@ Storage Doc is a personal cloud storage app: create an account, then upload,
 organize, search, preview, share, and manage your photos, videos, and
 documents.
 
-This is being built in phases (see [Roadmap](#roadmap) below). **Phase 1 —
-project setup, database, authentication, and the dashboard shell — is done.**
-File upload, folders, search, sharing, trash, and settings land in later
+This is being built in phases (see [Roadmap](#roadmap) below). **Phases 1–3 —
+auth, file upload/storage, and folders/search/views — are done.** Preview,
+favorites, recent activity, trash, sharing, and settings land in later
 phases.
 
 ## Stack
@@ -76,6 +76,7 @@ together with `CLIENT_URL`/`VITE_API_URL` if you need different ports.
   `STORAGE_DRIVER=s3`; works with AWS S3, Supabase Storage, or any
   S3-compatible provider
 - `DEFAULT_STORAGE_LIMIT_BYTES` — per-user storage quota (defaults to 10 GB)
+- `MAX_FILE_SIZE_BYTES` — per-upload size limit (defaults to 500 MB)
 
 **frontend/.env** (see `frontend/.env.example`):
 
@@ -88,20 +89,96 @@ placeholders only.
 
 - [x] **Phase 1** — project setup, database schema, authentication
       (register/login/logout/forgot-password/reset-password), dashboard shell
-- [ ] **Phase 2** — file upload, storage integration, file metadata, listing
-- [ ] **Phase 3** — folders, search, filtering, grid/list views
+- [x] **Phase 2** — file upload, storage integration, file metadata, listing
+- [x] **Phase 3** — folders, search, filtering, grid/list views
 - [ ] **Phase 4** — preview, favorites, recent files, trash
 - [ ] **Phase 5** — sharing, settings, storage analytics
 - [ ] **Phase 6** — security hardening, performance, tests, deployment
 
+## Deploying
+
+The frontend and backend deploy to **two different services**, and that's
+deliberate, not accidental complexity: the backend writes uploaded files to
+local disk, which needs a host with a real persistent server and disk.
+Vercel's hosting is serverless with no persistent disk, so it's a great fit
+for the frontend (a static Vite build) but not for the backend as currently
+built. Splitting them avoids the exact failure mode that made a previous
+project painful to deploy: pushing something to a host that silently can't
+support what it does, then debugging that after the fact.
+
+- **Frontend → Vercel**
+- **Backend + PostgreSQL → Railway** (or Render/Fly.io — anywhere with a
+  persistent volume and a long-running Node process)
+
+### 1. Backend + database (Railway)
+
+1. Create a new Railway project from this GitHub repo. When it asks for the
+   root/working directory, set it to `backend`.
+2. Add a **PostgreSQL** plugin to the project. Railway provisions it and
+   exposes a `DATABASE_URL` — reference that variable in your backend
+   service rather than retyping it.
+3. Add a **Volume** to the backend service, mounted at `/data`. Without this
+   step, uploaded files vanish on every redeploy — Railway's own filesystem
+   is otherwise just as ephemeral as Vercel's for this purpose.
+4. Set these environment variables on the backend service:
+   - `DATABASE_URL` — reference the Postgres plugin's variable
+   - `NODE_ENV` = `production`
+   - `CLIENT_URL` — your Vercel frontend URL (add this **after** step 2
+     below, once you know it; redeploy after setting it)
+   - `AUTH_SECRET` — a fresh secret, e.g. `openssl rand -base64 32` (don't
+     reuse the one in `.env.example` or your local `.env`)
+   - `JWT_EXPIRES_IN` = `7d`
+   - `COOKIE_NAME` = `storage_doc_token`
+   - `STORAGE_DRIVER` = `local`
+   - `STORAGE_LOCAL_DIR` = `/data/storage` (inside the volume from step 3)
+   - `DEFAULT_STORAGE_LIMIT_BYTES` = `10737418240`
+   - `MAX_FILE_SIZE_BYTES` = `524288000`
+5. Deploy. Railway runs `npm install` (which also runs `prisma generate` via
+   `postinstall`), `npm run build`, then `npm start` — and `npm start`
+   already runs `prisma migrate deploy` before starting the server, so the
+   database schema is created/updated automatically on every deploy; no
+   manual migration step.
+6. Copy the backend's public URL (Railway generates one, or attach a custom
+   domain) — you'll need it in step 2 below.
+
+### 2. Frontend (Vercel)
+
+1. Import this GitHub repo as a new Vercel project. Set **Root Directory**
+   to `frontend`. Vercel auto-detects the Vite framework preset from
+   `frontend/package.json` — leave the build/output settings on their
+   defaults.
+2. Set one environment variable: `VITE_API_URL` = the backend URL from
+   Railway step 6 (no trailing slash).
+3. Deploy. `frontend/vercel.json` already handles the SPA routing fallback
+   (so refreshing on `/dashboard` doesn't 404), so there's nothing else to
+   configure.
+
+### 3. Connect the two
+
+Go back to Railway and set `CLIENT_URL` to the Vercel URL from step 2
+(e.g. `https://storage-doc.vercel.app`), then redeploy the backend. This is
+what makes CORS and the login cookie work — the backend only accepts
+cross-site requests/cookies from exactly this origin.
+
+That's it — no other configuration should be needed. If login appears to
+"succeed" but you're immediately bounced back to the login page, it's
+almost always this last step (`CLIENT_URL` not matching the deployed
+frontend's exact URL, including `https://`).
+
 ## Testing what's built so far
 
-Backend auth endpoints (`/api/auth/register`, `/login`, `/logout`, `/me`,
-`/forgot-password`, `/reset-password`) were verified end-to-end via curl:
-registration validation, duplicate-email handling, login/logout, session
-cookies, and the full password-reset flow including one-time token use.
+Every phase so far was verified against the real backend and a real
+browser (Playwright), not just typechecked:
 
-The frontend was verified with a Playwright smoke test covering: register →
-dashboard → sidebar navigation → settings (showing real profile data) →
-logout → protected-route redirect → forgot-password flow, at both desktop
-and mobile viewport sizes.
+- **Auth** — register/login/logout, session cookies, forgot/reset password
+  (including one-time token use), cross-user isolation, all via curl.
+- **Files** — upload (valid + rejected types, size limits), storage-quota
+  enforcement, list/download/rename/favorite/delete, storage accounting
+  recalculated from actual file sizes after each change.
+- **Folders & search** — nested folder creation, folder-scoped uploads and
+  listing, breadcrumbs, rename, cross-folder move (with cycle rejection),
+  cascade delete that preserves file content, and search by file/folder
+  name with category and favorite filters.
+
+Formal automated tests (Phase 6) are still to come; this has been
+verified through scripted end-to-end runs each phase.

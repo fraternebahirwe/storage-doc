@@ -24,8 +24,13 @@ const REMEMBER_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 function cookieOptions(maxAgeMs?: number): CookieOptions {
   return {
     httpOnly: true,
+    // In production the frontend (Vercel) and backend (Railway) live on
+    // different domains, so the cookie must be sent cross-site. Browsers
+    // only allow that when SameSite=None, and SameSite=None requires
+    // Secure. Locally, both run on localhost, so Lax (and non-Secure,
+    // since local dev isn't HTTPS) keeps working without any changes.
     secure: isProduction,
-    sameSite: "lax",
+    sameSite: isProduction ? "none" : "lax",
     path: "/",
     ...(maxAgeMs ? { maxAge: maxAgeMs } : {}),
   };
